@@ -9,6 +9,10 @@ def get_user(db: Session, whatsapp_number: str):
 
 
 def create_user(db: Session, whatsapp_number: str):
+    existing_user = get_user(db, whatsapp_number)
+    if existing_user:
+        return existing_user
+
     db_user = User(whatsapp_number=whatsapp_number)
     db.add(db_user)
 
@@ -19,10 +23,8 @@ def create_user(db: Session, whatsapp_number: str):
     except IntegrityError:
         db.rollback()
         existing_user = get_user(db, whatsapp_number)
-
         if existing_user:
             return existing_user
-
         raise
     except Exception:
         db.rollback()

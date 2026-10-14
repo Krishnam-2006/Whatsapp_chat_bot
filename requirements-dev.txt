@@ -1,0 +1,7 @@
+
+-r requirements.txt
+
+pytest
+httpx
+ruff
+httpx2
