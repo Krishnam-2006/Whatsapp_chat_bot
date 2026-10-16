@@ -18,7 +18,7 @@ def test_generate_recipe_success(monkeypatch):
 
     monkeypatch.setattr(
         "app.services.groq.Groq",
-        lambda api_key: mock_client,
+        lambda **kwargs: mock_client,
     )
 
     result = generate_recipe("tomato", "Diet: vegan")
@@ -35,7 +35,7 @@ def test_generate_recipe_strips_whitespace(monkeypatch):
 
     monkeypatch.setattr(
         "app.services.groq.Groq",
-        lambda api_key: mock_client,
+        lambda **kwargs: mock_client,
     )
 
     result = generate_recipe("tomato", "No restrictions")
@@ -49,7 +49,7 @@ def test_generate_recipe_empty_content(monkeypatch):
 
     monkeypatch.setattr(
         "app.services.groq.Groq",
-        lambda api_key: mock_client,
+        lambda **kwargs: mock_client,
     )
 
     result = generate_recipe("tomato", "No restrictions")
@@ -66,7 +66,7 @@ def test_generate_recipe_none_content(monkeypatch):
 
     monkeypatch.setattr(
         "app.services.groq.Groq",
-        lambda api_key: mock_client,
+        lambda **kwargs: mock_client,
     )
 
     result = generate_recipe("tomato", "No restrictions")
@@ -82,7 +82,7 @@ def test_generate_recipe_api_error(monkeypatch):
 
     monkeypatch.setattr(
         "app.services.groq.Groq",
-        lambda api_key: mock_client,
+        lambda **kwargs: mock_client,
     )
 
     result = generate_recipe("tomato", "No restrictions")
@@ -101,7 +101,7 @@ def test_generate_recipe_uses_expected_model_and_options(monkeypatch):
 
     monkeypatch.setattr(
         "app.services.groq.Groq",
-        lambda api_key: mock_client,
+        lambda **kwargs: mock_client,
     )
 
     generate_recipe("tomato", "Diet: vegan")

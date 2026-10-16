@@ -15,6 +15,7 @@ if not TEST_DATABASE_URL:
         "Set TEST_DATABASE_URL to your test_recipebot PostgreSQL database URL."
     )
 
+
 if "test_recipebot" not in TEST_DATABASE_URL:
     raise RuntimeError("TEST_DATABASE_URL must point to the test_recipebot database.")
 
@@ -27,12 +28,12 @@ TestingSessionLocal = sessionmaker(
 )
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(autouse=True)
 def setup_test_database():
+    Base.metadata.drop_all(bind=test_engine)
     Base.metadata.create_all(bind=test_engine)
     yield
     Base.metadata.drop_all(bind=test_engine)
-    test_engine.dispose()
 
 
 @pytest.fixture

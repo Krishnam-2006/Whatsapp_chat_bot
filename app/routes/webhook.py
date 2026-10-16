@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.exc import IntegrityError
@@ -46,11 +47,20 @@ def process_message(
             return {"status": "duplicate"}
 
         if existing and existing.status == "processing":
-            return {"status": "processing"}
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
 
-        if existing and existing.status == "failed":
+            if existing.updated_at and existing.updated_at < cutoff:
+                existing.status = "processing"
+                existing.updated_at = datetime.now(timezone.utc)
+                db.commit()
+            else:
+                return {"status": "processing"}
+
+        elif existing and existing.status == "failed":
             existing.status = "processing"
+            existing.updated_at = datetime.now(timezone.utc)
             db.commit()
+
         else:
             raise HTTPException(
                 status_code=503,
@@ -114,6 +124,7 @@ async def twilio_webhook(
         dict(form_data),
         signature,
     ):
+        logger.warning("Invalid Twilio signature received")
         raise HTTPException(
             status_code=403,
             detail="Invalid Twilio signature",
@@ -123,16 +134,18 @@ async def twilio_webhook(
     message_body = form_data.get("Body")
     message_sid = form_data.get("MessageSid")
 
-    if (
-        not isinstance(sender, str)
-        or not sender.strip()
-        or not isinstance(message_body, str)
-        or not message_body.strip()
-    ):
+    if not isinstance(sender, str) or not sender.strip():
         raise HTTPException(
             status_code=400,
-            detail="Sender and message body are required",
+            detail="Sender is required",
         )
+
+    if not isinstance(message_body, str) or not message_body.strip():
+        send_message(
+            sender,
+            "Please send some ingredients so I can suggest a recipe.",
+        )
+        return {"status": "ignored"}
 
     if not isinstance(message_sid, str) or not message_sid.strip():
         raise HTTPException(

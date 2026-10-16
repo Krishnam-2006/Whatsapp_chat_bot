@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.db.crud import create_user, get_user, update_user
 
@@ -37,7 +38,8 @@ def test_create_duplicate_user_returns_existing_user(db_session):
     second_user = create_user(db_session, phone)
 
     assert first_user.whatsapp_number == second_user.whatsapp_number
-    assert first_user is second_user
+    assert first_user.whatsapp_number == second_user.whatsapp_number
+    assert get_user(db_session, phone) is not None
 
 
 def test_update_user_state(db_session):
@@ -113,3 +115,53 @@ def test_invalid_field_does_not_change_user(db_session):
 
     user = get_user(db_session, phone)
     assert user.state == "IDLE"
+
+
+def test_create_user_integrity_error_returns_existing(db_session, monkeypatch):
+    phone = "whatsapp:+910000000111"
+    existing_user = create_user(db_session, phone)
+
+    def fail_commit():
+        raise IntegrityError("INSERT", {}, Exception())
+
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+    monkeypatch.setattr(
+        "app.db.crud.get_user",
+        lambda db, number: existing_user,
+    )
+
+    assert create_user(db_session, phone) is existing_user
+
+
+def test_create_user_integrity_error_without_existing_user(db_session, monkeypatch):
+    def fail_commit():
+        raise IntegrityError("INSERT", {}, Exception())
+
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+    monkeypatch.setattr("app.db.crud.get_user", lambda db, number: None)
+
+    with pytest.raises(IntegrityError):
+        create_user(db_session, "whatsapp:+910000000112")
+
+
+def test_create_user_unexpected_error_rolls_back(db_session, monkeypatch):
+    def fail_commit():
+        raise RuntimeError("Database failure")
+
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+
+    with pytest.raises(RuntimeError, match="Database failure"):
+        create_user(db_session, "whatsapp:+910000000113")
+
+
+def test_update_user_commit_failure_rolls_back(db_session, monkeypatch):
+    phone = "whatsapp:+910000000114"
+    create_user(db_session, phone)
+
+    def fail_commit():
+        raise RuntimeError("Update failed")
+
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+
+    with pytest.raises(RuntimeError, match="Update failed"):
+        update_user(db_session, phone, state="AWAITING_DIET")

@@ -72,7 +72,7 @@ def test_ingredients_generate_recipe(db_session, monkeypatch):
 
     def fake_generate_recipe(ingredients, preferences):
         assert ingredients == "tomato and onion"
-        assert preferences == "Diet: None, Taste: None"
+        assert preferences == "Diet: no preference, Taste: no preference"
         return expected_reply
 
     monkeypatch.setattr(
@@ -128,3 +128,27 @@ def test_unexpected_state_resets_to_idle(db_session):
 
     assert reply == ("Sorry, let's start again. Send your ingredients to get a recipe.")
     assert user.state == "IDLE"
+
+
+def test_full_diet_to_recipe_flow(db_session, monkeypatch):
+    phone = "whatsapp:+910000000099"
+
+    reply = handle_message(db_session, phone, "DIET")
+    assert "Please choose your dietary preference" in reply
+
+    reply = handle_message(db_session, phone, "vegan")
+    assert "has been saved" in reply
+    assert get_user(db_session, phone).state == "IDLE"
+
+    def fake_generate_recipe(ingredients, preferences):
+        assert ingredients == "tofu and rice"
+        assert preferences == "Diet: vegan, Taste: no preference"
+        return "Mock vegan recipe"
+
+    monkeypatch.setattr(
+        "app.services.session.generate_recipe",
+        fake_generate_recipe,
+    )
+
+    reply = handle_message(db_session, phone, "tofu and rice")
+    assert reply == "Mock vegan recipe"

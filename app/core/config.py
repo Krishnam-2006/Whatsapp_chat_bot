@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     twilio_whatsapp_number: str
     twilio_webhook_url: str
     database_url: str
-    test_database_url: str
+    test_database_url: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env")
 

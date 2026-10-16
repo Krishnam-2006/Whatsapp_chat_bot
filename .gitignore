@@ -11,3 +11,11 @@ __pycache__/
 
 # Local executable
 ngrok.exe
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ruff cache
+.ruff_cache/

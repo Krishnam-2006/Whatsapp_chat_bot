@@ -19,7 +19,9 @@ def handle_message(db, whatsapp_number, message):
                 "vegan, vegetarian, keto, or no restrictions."
             )
         else:
-            user_preferences = f"Diet: {user.diet_type}, Taste: {user.taste_preference}"
+            diet = user.diet_type or "no preference"
+            taste = user.taste_preference or "no preference"
+            user_preferences = f"Diet: {diet}, Taste: {taste}"
             reply_text = generate_recipe(message, user_preferences)
 
     elif current_state == "AWAITING_DIET":
