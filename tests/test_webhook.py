@@ -84,12 +84,23 @@ def test_webhook_rejects_missing_sender(client, monkeypatch):
 
 def test_webhook_rejects_empty_message(client, monkeypatch):
     enable_valid_signature(monkeypatch)
+
+    calls = []
+
+    def fake_send(sender, message):
+        calls.append((sender, message))
+
+    monkeypatch.setattr("app.routes.webhook.send_message", fake_send)
+
     payload = valid_payload(body="   ")
 
     response = client.post("/webhook", data=payload)
 
     assert response.status_code == 200
     assert response.json() == {"status": "ignored"}
+    assert len(calls) == 1
+    assert calls[0][0] == payload["From"]
+    assert "ingredients" in calls[0][1].lower()
 
 
 def test_webhook_rejects_missing_message_sid(client, monkeypatch):
@@ -381,6 +392,14 @@ def test_webhook_rejects_absent_sender(client, monkeypatch):
 
 def test_webhook_ignores_absent_body(client, monkeypatch):
     enable_valid_signature(monkeypatch)
+
+    calls = []
+
+    def fake_send(sender, message):
+        calls.append((sender, message))
+
+    monkeypatch.setattr("app.routes.webhook.send_message", fake_send)
+
     payload = valid_payload()
     payload.pop("Body")
 
@@ -388,3 +407,6 @@ def test_webhook_ignores_absent_body(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ignored"}
+    assert len(calls) == 1
+    assert calls[0][0] == payload["From"]
+    assert "ingredients" in calls[0][1].lower()
