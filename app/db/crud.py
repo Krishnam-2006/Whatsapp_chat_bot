@@ -52,5 +52,3 @@ def update_user(db: Session, whatsapp_number: str, **kwargs):
             raise
 
     return db_user
-
-    return db_user

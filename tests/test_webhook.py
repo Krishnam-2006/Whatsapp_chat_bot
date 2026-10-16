@@ -1,4 +1,7 @@
+from datetime import datetime, timedelta, timezone
+
 from app.models.processed_message import ProcessedMessage
+from app.routes.webhook import settings, validator
 
 
 def valid_payload(message_sid="SM_TEST_001", body="tomato and onion"):
@@ -28,6 +31,46 @@ def test_webhook_rejects_invalid_signature(client, monkeypatch):
     assert response.json()["detail"] == "Invalid Twilio signature"
 
 
+def test_webhook_rejects_missing_signature(client):
+    response = client.post(
+        "/webhook",
+        data=valid_payload(),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Invalid Twilio signature"
+
+
+def test_webhook_accepts_valid_real_signature(
+    client,
+    monkeypatch,
+):
+
+    payload = valid_payload()
+    signature = validator.compute_signature(
+        settings.twilio_webhook_url,
+        payload,
+    )
+
+    monkeypatch.setattr(
+        "app.routes.webhook.handle_message",
+        lambda db, sender, body: "Mock recipe",
+    )
+    monkeypatch.setattr(
+        "app.routes.webhook.send_message",
+        lambda sender, body: None,
+    )
+
+    response = client.post(
+        "/webhook",
+        data=payload,
+        headers={"X-Twilio-Signature": signature},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 def test_webhook_rejects_missing_sender(client, monkeypatch):
     enable_valid_signature(monkeypatch)
     payload = valid_payload()
@@ -36,17 +79,28 @@ def test_webhook_rejects_missing_sender(client, monkeypatch):
     response = client.post("/webhook", data=payload)
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Sender and message body are required"
+    assert response.json()["detail"] == "Sender is required"
 
 
 def test_webhook_rejects_empty_message(client, monkeypatch):
     enable_valid_signature(monkeypatch)
+
+    calls = []
+
+    def fake_send(sender, message):
+        calls.append((sender, message))
+
+    monkeypatch.setattr("app.routes.webhook.send_message", fake_send)
+
     payload = valid_payload(body="   ")
 
     response = client.post("/webhook", data=payload)
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Sender and message body are required"
+    assert response.status_code == 200
+    assert response.json() == {"status": "ignored"}
+    assert len(calls) == 1
+    assert calls[0][0] == payload["From"]
+    assert "ingredients" in calls[0][1].lower()
 
 
 def test_webhook_rejects_missing_message_sid(client, monkeypatch):
@@ -246,3 +300,113 @@ def test_webhook_marks_message_failed_when_sending_fails(
 
     assert record is not None
     assert record.status == "failed"
+
+
+def test_webhook_retries_stale_processing_message(
+    client,
+    monkeypatch,
+    db_session,
+):
+    enable_valid_signature(monkeypatch)
+
+    db_session.add(
+        ProcessedMessage(
+            message_sid="SM_WEBHOOK_STALE",
+            status="processing",
+            updated_at=datetime.now(timezone.utc) - timedelta(minutes=6),
+        )
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "app.routes.webhook.handle_message",
+        lambda db, sender, body: "Retry recipe",
+    )
+    monkeypatch.setattr(
+        "app.routes.webhook.send_message",
+        lambda sender, body: None,
+    )
+
+    response = client.post(
+        "/webhook",
+        data=valid_payload(message_sid="SM_WEBHOOK_STALE"),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+    record = (
+        db_session.query(ProcessedMessage)
+        .filter(ProcessedMessage.message_sid == "SM_WEBHOOK_STALE")
+        .first()
+    )
+    assert record.status == "completed"
+
+
+def test_webhook_handles_message_processing_exception(
+    client,
+    monkeypatch,
+    db_session,
+):
+    enable_valid_signature(monkeypatch)
+
+    def fail_to_process(db, sender, body):
+        raise RuntimeError("Processing failed")
+
+    monkeypatch.setattr(
+        "app.routes.webhook.handle_message",
+        fail_to_process,
+    )
+    monkeypatch.setattr(
+        "app.routes.webhook.send_message",
+        lambda sender, body: None,
+    )
+
+    response = client.post(
+        "/webhook",
+        data=valid_payload(message_sid="SM_PROCESSING_EXCEPTION"),
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Message processing failed"
+
+    record = (
+        db_session.query(ProcessedMessage)
+        .filter(ProcessedMessage.message_sid == "SM_PROCESSING_EXCEPTION")
+        .first()
+    )
+    assert record is not None
+    assert record.status == "failed"
+
+
+def test_webhook_rejects_absent_sender(client, monkeypatch):
+    enable_valid_signature(monkeypatch)
+    payload = valid_payload()
+    payload.pop("From")
+
+    response = client.post("/webhook", data=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Sender is required"
+
+
+def test_webhook_ignores_absent_body(client, monkeypatch):
+    enable_valid_signature(monkeypatch)
+
+    calls = []
+
+    def fake_send(sender, message):
+        calls.append((sender, message))
+
+    monkeypatch.setattr("app.routes.webhook.send_message", fake_send)
+
+    payload = valid_payload()
+    payload.pop("Body")
+
+    response = client.post("/webhook", data=payload)
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ignored"}
+    assert len(calls) == 1
+    assert calls[0][0] == payload["From"]
+    assert "ingredients" in calls[0][1].lower()

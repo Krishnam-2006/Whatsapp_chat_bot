@@ -1,0 +1,51 @@
+
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_recipebot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d test_recipebot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        env:
+          PYTHONPATH: .
+          GROQ_API_KEY: test-key
+          TWILIO_ACCOUNT_SID: test-sid
+          TWILIO_AUTH_TOKEN: test-token
+          TWILIO_WHATSAPP_NUMBER: whatsapp:+10000000000
+          TWILIO_WEBHOOK_URL: https://example.com/webhook
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_recipebot
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_recipebot
+        run: pytest -q

@@ -9,7 +9,10 @@ logger = logging.getLogger(__name__)
 
 def generate_recipe(ingredients: str, user_preferences: str) -> str:
     try:
-        client = Groq(api_key=settings.groq_api_key)
+        client = Groq(
+            api_key=settings.groq_api_key,
+            timeout=10.0,
+        )
 
         prompt = f"""
 You are a professional chef.

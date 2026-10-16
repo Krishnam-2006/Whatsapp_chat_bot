@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from app.core.config import settings
 from app.services.twilio import send_message
 
 
@@ -19,7 +20,7 @@ def test_send_message_success(monkeypatch):
 
     assert result.sid == "SM123"
     mock_client.messages.create.assert_called_once_with(
-        from_=pytest.importorskip("app.core.config").settings.twilio_whatsapp_number,
+        from_=settings.twilio_whatsapp_number,
         to="whatsapp:+910000000001",
         body="Hello!",
     )
